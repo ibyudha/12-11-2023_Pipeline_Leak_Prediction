@@ -260,8 +260,8 @@ class App(ttk.Frame):
 if __name__ == '__main__':
     root = tk.Tk()
     app = App(root)
-    asset_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets')
     root.title("Pipeline Leak Prediction - PLP for AIMS")
+    root.iconbitmap('assets/images/aims.ico')
     root.attributes('-fullscreen', True)
     root.tk.call("source", 'assets/setting.tcl')
     root.tk.call("set_theme", "dark")
