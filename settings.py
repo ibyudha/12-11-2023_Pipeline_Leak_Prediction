@@ -24,9 +24,9 @@ class App(ttk.Frame):
         self.notebook = ttk.Notebook(self)
         self.notebook.grid(row=0, column=1, padx=10, pady=10, sticky="nsew")
         self.pane_pelatihan = None
-        pygame.mixer.init()
-        pygame.mixer.music.load('assets/sounds/BackgroundMusic.mp3')
-        pygame.mixer.music.play(-1)
+        #pygame.mixer.init()
+        #pygame.mixer.music.load('assets/sounds/BackgroundMusic.mp3')
+        #pygame.mixer.music.play(-1)
         parent.grid_columnconfigure(0, weight=10)
         parent.grid_columnconfigure(1, weight=90)
         self.current_pane = None
@@ -39,22 +39,106 @@ class App(ttk.Frame):
         self.welcome_btn = ttk.Button(self.menu_frame, text="Home")
         self.welcome_btn.grid(row=0, column=0, padx=5, pady=10, sticky="nsew")
         self.welcome_btn.config(command=lambda: self.show_pane(self.create_other_pane("home")))
+        self.preprocessing_btn = ttk.Button(self.menu_frame, text="Preprocessing")
+        self.preprocessing_btn.grid(row=1, column=0, padx=5, pady=10, sticky="nsew")
+        self.preprocessing_btn.config(command=lambda: self.show_pane(self.create_preprocessing_pane()))
         self.pelatihan_btn = ttk.Button(self.menu_frame, text="Training")
-        self.pelatihan_btn.grid(row=1, column=0, padx=5, pady=10, sticky="nsew")
+        self.pelatihan_btn.grid(row=2, column=0, padx=5, pady=10, sticky="nsew")
         self.pelatihan_btn.config(command=lambda: self.show_pane(self.create_pelatihan_pane()))
         self.prediksi_btn = ttk.Button(self.menu_frame, text="Prediction")
-        self.prediksi_btn.grid(row=2, column=0, padx=5, pady=10, sticky="nsew")
+        self.prediksi_btn.grid(row=3, column=0, padx=5, pady=10, sticky="nsew")
         self.prediksi_btn.config(command=lambda: self.show_pane(self.create_prediksi_pane()))
         self.bantuan_btn = ttk.Button(self.menu_frame, text="Help")
-        self.bantuan_btn.grid(row=3, column=0, padx=5, pady=10, sticky="nsew")
+        self.bantuan_btn.grid(row=4, column=0, padx=5, pady=10, sticky="nsew")
         self.bantuan_btn.config(command=lambda: self.show_pane(self.create_other_pane("help")))
         self.about_btn = ttk.Button(self.menu_frame, text="About")
-        self.about_btn.grid(row=4, column=0, padx=5, pady=10, sticky="nsew")
+        self.about_btn.grid(row=5, column=0, padx=5, pady=10, sticky="nsew")
         self.about_btn.config(command=lambda: self.show_pane(self.create_other_pane("about")))
         self.keluar_btn = ttk.Button(self.menu_frame, text="Exit", style="Accent.TButton")
-        self.keluar_btn.grid(row=5, column=0, padx=5, pady=10, sticky="nsew")
+        self.keluar_btn.grid(row=6, column=0, padx=5, pady=10, sticky="nsew")
         self.keluar_btn.config(command=self.confirm_exit)
         self.show_pane(self.create_other_pane("home"))
+    def create_preprocessing_pane(self):
+        frame = ttk.Frame(self.paned, padding=(20, 10))
+        frame.grid(column=0, row=0, padx=(20, 10), pady=(20, 10), sticky="nsew")
+        label = tk.Label(frame, text="Preprocessing Page", font=('Space Age', 24), anchor="w", justify="left")
+        label.grid(row=0, column=0, padx=10, pady=10, sticky="w")
+        csv_frame = ttk.Frame(frame)
+        csv_frame.grid(row=1, column=0, padx=10, pady=10, sticky="w")
+        label_entry = tk.Label(csv_frame, text="Load File .csv:")
+        label_entry.grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        self.file_path_var = tk.StringVar()
+        entry = ttk.Entry(csv_frame, textvariable=self.file_path_var)
+        entry.grid(row=1, column=0, padx=5, pady=10, sticky="w")
+        browse_btn = ttk.Button(csv_frame, text="Choose File", style="Accent.TButton")
+        browse_btn.grid(row=1, column=4, padx=5, pady=10)
+        browse_btn.config(command=self.browse_file)
+        submit_frame = ttk.Frame(frame)
+        submit_frame.grid(row=2, column=0, padx=10, pady=10, sticky="w")
+        style = ttk.Style()
+        style.configure("Accent.TButton", foreground="white", background="blue")
+        hasil_plot_frame = ttk.Frame(frame)
+        hasil_plot_frame.grid(row=0, column=2, padx=10, pady=10, sticky="w")
+        preprocessing_btn = ttk.Button(submit_frame, text="Process", style="Accent.TButton")
+        preprocessing_btn.grid(row=0, column=0, padx=5, pady=10, sticky="w")
+        preprocessing_btn.config(command= lambda: self.preprocessing_data(hasil_plot_frame))
+        return frame
+    def preprocessing_data(self, pane):
+        csv_file = self.file_path_var.get()
+        if not csv_file:
+            messagebox.showerror("Error", "Please select the CSV file first.")
+            return
+        try:
+            data = pd.read_csv(csv_file)
+            df = pd.DataFrame(data)
+            transposed_df = df.pivot_table(index=['leak_location', 'leak_size'], columns='length', values=['flow_rate', 'pressure'], aggfunc='first')
+            if not os.path.exists("preprocessed") : 
+                os.makedirs("preprocessed")
+            transposed_df.to_csv('preprocessed/transposed_data.csv')
+            plot_data = pd.read_csv('preprocessed/transposed_data.csv')
+            plot_data = plot_data.iloc[2:,1:]
+            plot_data.columns = ['leak_size'] + [f'length_{col}' for col in plot_data.columns[1:]]
+            plot_data.reset_index(drop=True, inplace=True)
+            if not os.path.exists("dataset") : 
+                os.makedirs("dataset/train")
+                os.makedirs("dataset/test")
+            for i in range(5):
+                split_margin = int(len(plot_data)*(50+(i*10))/100)
+                trainset = plot_data.iloc[:split_margin, :]
+                testset = plot_data.iloc[split_margin:, :]
+                trainset.to_csv(f'dataset/train/train_{50 + (i * 10)}_{50 - (i * 10)}.csv', index=False)
+                testset.to_csv(f'dataset/test/test_{50 + (i * 10)}_{50 - (i * 10)}.csv', index=False)
+            if not os.path.exists("visualization/preprocessing") : 
+                os.makedirs("visualization/preprocessing")
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 9))
+            for j in range(int(len(plot_data)/12)):
+                for i in range(12):
+                    flowrate = plot_data.iloc[i+(j*12):i+(j*12)+1, 1:29].T
+                    pressure = plot_data.iloc[i+(j*12):i+(j*12)+1, 29:].T
+                    length = data[0:28]['length']
+                    ax1.plot(length, flowrate, marker='o', linestyle='-', label=f'Flow Rate {i + 1}')
+                    ax2.plot(length, pressure, marker='o', linestyle='-', label=f'Pressure {i + 1}')
+                judul = "SCENARIO " + str(j+1)
+                fig.suptitle(judul, fontsize=16)
+                ax1.set_title('Flow Rate Comparison')
+                ax1.set_xlabel('Length')
+                ax1.set_ylabel('Flow Rate')
+                ax1.grid(True)
+                ax1.legend()
+                ax2.set_title('Pressure Comparison')
+                ax2.set_xlabel('Length')
+                ax2.set_ylabel('Pressure')
+                ax2.grid(True)
+                ax1.legend(loc='upper center', bbox_to_anchor=(0.5, -0.15), ncol=3)  # atur lokasi dan jumlah kolom legenda
+                ax2.legend(loc='upper center', bbox_to_anchor=(0.5, -0.15), ncol=3)
+                plt.savefig(f'visualization/preprocessing/scenario_{j+1}.png', bbox_inches='tight', pad_inches=0.1)
+                plt.show()
+            messagebox.showinfo("Process Complete!", "Data has been preprocessed.")
+            if self.pane_pelatihan:
+                for widget in self.pane_pelatihan.winfo_children():
+                    widget.destroy() 
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
     def create_pelatihan_pane(self):
         frame = ttk.Frame(self.paned, padding=(20, 10))
         frame.grid(column=0, row=0, padx=(20, 10), pady=(20, 10), sticky="nsew")
@@ -255,7 +339,7 @@ class App(ttk.Frame):
     def confirm_exit(self):
         confirm = messagebox.askyesno("Confirm", "Are you sure you want to leave?")
         if confirm:
-            pygame.mixer.music.stop()
+            #pygame.mixer.music.stop()
             root.destroy() 
 if __name__ == '__main__':
     root = tk.Tk()
