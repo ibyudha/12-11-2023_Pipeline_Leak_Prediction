@@ -129,7 +129,7 @@ class App(ttk.Frame):
                 ax2.set_xlabel('Length')
                 ax2.set_ylabel('Pressure')
                 ax2.grid(True)
-                ax1.legend(loc='upper center', bbox_to_anchor=(0.5, -0.15), ncol=3)  # atur lokasi dan jumlah kolom legenda
+                ax1.legend(loc='upper center', bbox_to_anchor=(0.5, -0.15), ncol=3)
                 ax2.legend(loc='upper center', bbox_to_anchor=(0.5, -0.15), ncol=3)
                 plt.savefig(f'visualization/preprocessing/scenario_{j+1}.png', bbox_inches='tight', pad_inches=0.1)
                 plt.show()
@@ -165,49 +165,72 @@ class App(ttk.Frame):
         pelatihan_btn.config(command= lambda: self.train_model_threaded(hasil_plot_frame))
         return frame
     def train_model_threaded(self, pane):
-        training_thread = threading.Thread(target=lambda: self.train_model(pane, 'leak_size', 'ann_model_for_leak_size'))
+        training_thread = threading.Thread(target=lambda: self.train_model(pane))
         training_thread.start()
         loading_label = ttk.Label(pane, text="Processing, please wait...")
         loading_label.grid(row=3, column=0, padx=10, pady=10, sticky="w")
         progress = ttk.Progressbar(pane, mode='indeterminate')
         progress.grid(row=4, column=0, padx=10, pady=10, sticky="w")
         progress.start()
-        training_thread = threading.Thread(target=lambda: self.train_model(pane, 'leak_location', 'ann_model_for_leak_location'))
-        training_thread.start()
-        loading_label = ttk.Label(pane, text="Processing, please wait...")
-        loading_label.grid(row=3, column=0, padx=10, pady=10, sticky="w")
-        progress = ttk.Progressbar(pane, mode='indeterminate')
-        progress.grid(row=4, column=0, padx=10, pady=10, sticky="w")
-        progress.start()
-    def train_model(self, pane, target_column, model_name):
+    def train_model(self, pane):
         csv_file = self.file_path_var.get()
         if not csv_file:
             messagebox.showerror("Error", "Please select the CSV file first.")
             return
         try:
             data = pd.read_csv(csv_file)
-            X = data[['length', 'flow_rate', 'velocity', 'pressure']]
-            y = data[target_column]
-            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
-            model = Sequential()
-            model.add(Dense(32, input_dim=4, activation='relu'))
-            model.add(Dense(64, activation='relu'))
-            model.add(Dense(32, activation='relu'))
-            model.add(Dense(1, activation='linear'))
-            model.compile(loss='mean_squared_error', optimizer='adam')
-            early_stopping = EarlyStopping(monitor='val_loss', patience=10, verbose=1)
-            model.fit(X_train, y_train, epochs=1000, batch_size=40, validation_data=(X_test, y_test), callbacks=[early_stopping])
-            mse = model.evaluate(X_test, y_test, verbose=0)
-            print(f'Mean Squared Error (MSE) for {target_column}: {mse}')
+            X = data.iloc[1:, 1:]
+            y_reg = data.iloc[1:, 0:1]
+            X_train_reg, X_test_reg, y_train_reg, y_test_reg = train_test_split(X, y_reg, test_size=0.1, random_state=42)
+            model_reg = Sequential()
+            model_reg.add(Dense(32, input_dim=56, activation='relu'))
+            model_reg.add(Dense(64, activation='relu'))
+            model_reg.add(Dense(32, activation='relu'))
+            model_reg.add(Dense(1, activation='linear'))
+            model_reg.compile(loss='mean_squared_error', optimizer='adam')
+            early_stopping_reg = EarlyStopping(monitor='val_loss', patience=10, verbose=1)
+            history_reg = model_reg.fit(X_train_reg, y_train_reg, epochs=1000, batch_size=1, validation_data=(X_test_reg, y_test_reg), callbacks=[early_stopping_reg])
+            y_cls = np.where(y_reg > y_reg.mean(), 1, 0)
+            X_train_cls, X_test_cls, y_train_cls, y_test_cls = train_test_split(X, y_cls, test_size=0.1, random_state=42)
+            model_cls = Sequential()
+            model_cls.add(Dense(32, input_dim=56, activation='relu'))
+            model_cls.add(Dense(64, activation='relu'))
+            model_cls.add(Dense(32, activation='relu'))
+            model_cls.add(Dense(1, activation='sigmoid'))
+            model_cls.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
+            early_stopping_cls = EarlyStopping(monitor='val_loss', patience=10, verbose=1)
+            history_cls = model_cls.fit(X_train_cls, y_train_cls, epochs=1000, batch_size=1, validation_data=(X_test_cls, y_test_cls), callbacks=[early_stopping_cls])
             if not os.path.exists("model") : 
                 os.makedirs("model")
-            model.save(f'model/{model_name}.h5')
+            model_reg.save('model/model-regression.h5')
+            model_cls.save('model/model-classification.h5')
             progress = pane.grid_slaves(row=4, column=0)[0]
             loading_label = pane.grid_slaves(row=3, column=0)[0]
             progress.stop()
             progress.grid_forget()
             loading_label.grid_forget()
-            if target_column == "leak_location": messagebox.showinfo("Process Complete!", "Model training has been completed.")
+            if not os.path.exists("visualization/training") : 
+                os.makedirs("visualization/training")
+            fig, axes = plt.subplots(1, 2, figsize=(16, 7))
+            axes[0].plot(history_reg.history['loss'], label='Training Loss')
+            axes[0].plot(history_reg.history['val_loss'], label='Validation Loss')
+            axes[0].set_title('Regression')
+            axes[0].set_xlabel('Epochs')
+            axes[0].set_ylabel('Loss')
+            axes[0].legend(loc='upper center', bbox_to_anchor=(0.5, -0.15), ncol=1)
+            axes[1].plot(history_cls.history['loss'], label='Training Loss')
+            axes[1].plot(history_cls.history['val_loss'], label='Validation Loss')
+            axes[1].set_title('Classification')
+            axes[1].set_xlabel('Epochs')
+            axes[1].set_ylabel('Loss')
+            axes[1].legend(loc='upper center', bbox_to_anchor=(0.5, -0.15), ncol=1)
+            current_datetime = datetime.now()
+            formatted_datetime = current_datetime.strftime("%d%m%Y_%H%M%S")
+            judul = "TRAINING RESULT"
+            fig.suptitle(judul, fontsize=16)
+            plt.savefig(f'visualization/training/training_result_{formatted_datetime}.png', bbox_inches='tight', pad_inches=0.1)
+            plt.show()
+            messagebox.showinfo("Process Complete!", "Model training has been completed.")
             if self.pane_pelatihan:
                 for widget in self.pane_pelatihan.winfo_children():
                     widget.destroy() 
