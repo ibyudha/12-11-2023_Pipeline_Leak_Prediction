@@ -21,6 +21,9 @@ from tensorflow.keras.layers import Dense, Dropout, BatchNormalization
 from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.models import save_model, load_model
 class App(ttk.Frame):
+
+
+    
     def __init__(self, parent):
         ttk.Frame.__init__(self, parent)
         self.parent = parent
